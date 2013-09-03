@@ -35,15 +35,19 @@ class Crawler
 
 		while ($active && $mrc == CURLM_OK) 
 		{
-			if (curl_multi_select($mh) != -1) 
+			if (curl_multi_select($this->mh) != -1) 
 			{
 				do {
 					$mrc = curl_multi_exec($this->mh, $active);
-					$info = curl_multi_info_read($mh);
-					if (false !== $info) {
-						var_dump($info);
+					if ($mrc == CURLM_OK)
+					{
+						$info = curl_multi_info_read($this->mh);
+						if (false !== $info) {
+							$this->process($info);
+						}
+					}else{
+						echo curl_multi_strerror($mrc)."\n";;
 					}
-					$this->process($info);
 				} while ($mrc == CURLM_CALL_MULTI_PERFORM);
 			}
 		}
@@ -54,11 +58,13 @@ class Crawler
 		$cjob = null;
 		$jobkey = -1;
 		$urlNum = -1;
-		foreach($this->jobs as $key => $&job)
+		foreach($this->jobs as $key => &$job)
 		{
 			foreach($job->urlArray as $num => $url)
 			{
-				if ($url->hd == $info->handle)
+				//var_dump($info);
+				//var_dump($url);
+				if ($url->hd == $info['handle'])
 				{
 					$cjob = &$job;
 					$jobkey = $key;
@@ -71,10 +77,10 @@ class Crawler
 		if (is_null($cjob))
 		{
 			echo "handle could not be found.\n";
-			var_dump($info);
+			//var_dump($info);
 			return false;
 		}
-		if ($info->result != CURLE_OK)
+		if ($info['result'] != CURLE_OK)
 		{
 			$cjob->setError(array($info->result, $info));
 			return false;
@@ -83,7 +89,7 @@ class Crawler
 		{
 			unset($this->jobs[$jobkey]);
 		}	
-		curl_multi_remove_handle($this->mh, $info->handle);
+		curl_multi_remove_handle($this->mh, $info['handle']);
 	}
 
 	//jobs: object or array contain objects
@@ -161,7 +167,8 @@ class Crawler
 				continue;
 			}
 
-			$hd = curl_init($options);
+			$hd = curl_init();
+			curl_setopt_array($hd, $options);
 			curl_multi_add_handle($this->mh,$hd);
 			$url->hd = $hd;
 		}
@@ -187,7 +194,7 @@ class Crawler
 		}
 
 		//add jobs
-		foreach($this->jobs as $job)
+		foreach($this->jobs as &$job)
 		{
 			$this->processJob($job);
 		}
@@ -202,14 +209,15 @@ abstract class CrawlJob
 {
 	//array contain Url objects 
 	public $urlArray; 
-	private $setting;
+	protected $setting;
 	private $errors;
 	private $urlGetCount;
+	protected $results;
 	//$url:
 	//     Url object or array('url' => '', 'method' => 'GET', 'data' => '')
 	//$setting: array
 	//         ('referer', 'agent', 'useProxy', 'proxyPort', 'proxyIp')
-	public function __construct($url, $setting)
+	public function __construct($url, $setting = array())
 	{
 		if ($url instanceof Url)
 		{ 
@@ -231,9 +239,11 @@ abstract class CrawlJob
 			}
 		}
 
-		DefaultCrawlSetting::completeSetting($setting);
+		$setting = DefaultCrawlSetting::completeSetting($setting);
 		$this->setting = $setting;
 		$this->urlGetCount = 0;
+
+		$this->results = array();
 	}
 
 	public function urlDone($no)
@@ -243,17 +253,18 @@ abstract class CrawlJob
 		$data = curl_multi_getcontent($this->urlArray[$no]->hd);
 		$html = new simple_html_dom($data);
 
-		$this->process($html, $this->urlArray[$no]->hd);
+		$res = $this->process($html, $this->urlArray[$no]);
+		$this->results[$no] = $res;
 		if ($this->urlGetCount === count($this->urlArray))
 		{
-			$this->jobDone();
+			$this->jobDone($this->results);
 			return true;
 		}
 		return false;
 	}
 	public function getSetting()
 	{
-		return $setting;
+		return $this->setting;
 	}
 	public function setError($err)
 	{
@@ -263,11 +274,11 @@ abstract class CrawlJob
 	//like:
 	//$result = '123';
 	//return $result;
-	abstract public function process();
+	abstract public function process($html, $urlobj);
 	//$result: result return by process();
-	abstract public function save($result);
+	//abstract public function save($result);
 	abstract public function onError();
-	abstract public function jobDone();
+	abstract public function jobDone($results);
 
 }
 
@@ -301,7 +312,9 @@ class DefaultCrawlSetting
 			}else{
 				$setting['autoref'] = false;
 			}
+			//var_dump($setting);
 		}
+		return $setting;
 	}
 
 }
@@ -319,6 +332,7 @@ class Url
 		$this->url = $url;
 		$this->method = $method;
 		$this->data = $data;
+		$this->hd = null;
 	}
 }
 ?>
