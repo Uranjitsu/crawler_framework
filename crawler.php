@@ -12,12 +12,14 @@ class Crawler
 	private $jobs; //array contain CrawlJob objects
 	private $has_start;//
 	private $mh;
+	private $active;
 
 	public function __construct()
 	{
 		$this->jobs = array();
 		$this->mh = curl_multi_init();
 		$this->has_start = false;
+		$this->active = null;
 	}
 	public function __destruct()
 	{
@@ -27,18 +29,14 @@ class Crawler
 	public function getUrlContent()
 	{
 		$this->has_start = true;
-		$active = null;
+		$mrc = $this->multiExec();
 
-		do {
-			$mrc = curl_multi_exec($this->mh, $active);
-		} while ($mrc == CURLM_CALL_MULTI_PERFORM);
-
-		while ($active && $mrc == CURLM_OK) 
+		while ($this->active && $mrc == CURLM_OK) 
 		{
 			if (curl_multi_select($this->mh) != -1) 
 			{
 				do {
-					$mrc = curl_multi_exec($this->mh, $active);
+					$mrc = curl_multi_exec($this->mh, $this->active);
 					if ($mrc == CURLM_OK)
 					{
 						$info = curl_multi_info_read($this->mh);
@@ -46,15 +44,37 @@ class Crawler
 							$this->process($info);
 						}
 					}else{
-						echo curl_multi_strerror($mrc)."\n";;
+						//echo curl_multi_strerror($mrc)."\n";;
+						//php version < 5.5 not support this function
 					}
 				} while ($mrc == CURLM_CALL_MULTI_PERFORM);
 			}
 		}
 	}
 
+	private function multiExec()
+	{
+		do {
+			$mrc = curl_multi_exec($this->mh, $this->active);
+		} while ($mrc == CURLM_CALL_MULTI_PERFORM);
+
+		foreach($this->jobs as $job)
+		{
+			foreach($job->urlArray as $url)
+			{
+				if (strlen(curl_error($url->hd)) !== 0)
+				{
+					$job->setError(curl_error($url->hd), $url);
+					$job->onError();
+				}
+			}
+		}
+		return $mrc;
+	}
+
 	public function process($info)
 	{
+		echo "in process\n";
 		$cjob = null;
 		$jobkey = -1;
 		$urlNum = -1;
@@ -82,10 +102,11 @@ class Crawler
 		}
 		if ($info['result'] != CURLE_OK)
 		{
-			$cjob->setError(array($info->result, $info));
+			$cjob->setError(array($info['result'], $info));
+			$cjob->onError();
 			return false;
 		}
-		if ($cjob->urlDone($urlNum))
+		if ($cjob->urlDone($urlNum, $this))
 		{
 			unset($this->jobs[$jobkey]);
 		}	
@@ -109,9 +130,7 @@ class Crawler
 				}
 				$this->jobs = array_merge($this->jobs, $jobs);
 			}
-			do {
-				$mrc = curl_multi_exec($mh, $active);
-			} while ($mrc == CURLM_CALL_MULTI_PERFORM);
+			$this->multiExec();
 		}else{
 			if ($jobs instanceof CrawlJob)
 			{ 
@@ -215,6 +234,8 @@ abstract class CrawlJob
 	protected $results;
 	//$url:
 	//     Url object or array('url' => '', 'method' => 'GET', 'data' => '')
+	//     or Url object array
+	//     or array of array contain 'url' key
 	//$setting: array
 	//         ('referer', 'agent', 'useProxy', 'proxyPort', 'proxyIp')
 	public function __construct($url, $setting = array())
@@ -235,7 +256,23 @@ abstract class CrawlJob
 				}	
 				$this->urlArray = array($obj);
 			}else{
-				$this->urlArray = $url;
+
+				$this->urlArray = array();
+				foreach($url as $u)
+				{
+					if ($u instanceof Url)
+						$this->urlArray[] = $u;
+					else if (is_array($u) && array_key_exists('url', $u))
+					{
+						$obj = new Url($u['url']);
+						foreach($u as $key => $val)
+						{
+							$obj->$key = $val;
+						}	
+						$this->urlArray[] = $obj;
+					}
+				}
+
 			}
 		}
 
@@ -246,18 +283,18 @@ abstract class CrawlJob
 		$this->results = array();
 	}
 
-	public function urlDone($no)
+	public function urlDone($no, $crawler)
 	{
 		$this->urlGetCount++;
 
 		$data = curl_multi_getcontent($this->urlArray[$no]->hd);
 		$html = new simple_html_dom($data);
 
-		$res = $this->process($html, $this->urlArray[$no]);
+		$res = $this->process($html, $this->urlArray[$no], $crawler);
 		$this->results[$no] = $res;
 		if ($this->urlGetCount === count($this->urlArray))
 		{
-			$this->jobDone($this->results);
+			$this->jobDone($this->results, $crawler);
 			return true;
 		}
 		return false;
@@ -274,11 +311,11 @@ abstract class CrawlJob
 	//like:
 	//$result = '123';
 	//return $result;
-	abstract public function process($html, $urlobj);
+	abstract public function process($html, $urlobj, $crawler);
 	//$result: result return by process();
 	//abstract public function save($result);
 	abstract public function onError();
-	abstract public function jobDone($results);
+	abstract public function jobDone($results, $crawler);
 
 }
 
