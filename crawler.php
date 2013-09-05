@@ -39,16 +39,17 @@ class Crawler
 					$mrc = curl_multi_exec($this->mh, $this->active);
 					if ($mrc == CURLM_OK)
 					{
-						$info = curl_multi_info_read($this->mh);
-						if (false !== $info) {
+						while($info = curl_multi_info_read($this->mh))
+						{   
 							$this->process($info);
-						}
-					}else{
-						//echo curl_multi_strerror($mrc)."\n";;
-						//php version < 5.5 not support this function
+						}    
 					}
 				} while ($mrc == CURLM_CALL_MULTI_PERFORM);
 			}
+		}
+		foreach($this->jobs as $job)
+		{
+			$job->jobDone($this);
 		}
 	}
 
@@ -66,6 +67,7 @@ class Crawler
 				{
 					$job->setError(curl_error($url->hd), $url);
 					$job->onError();
+					curl_multi_remove_handle($this->mh, $url->hd);
 				}
 			}
 		}
@@ -230,7 +232,7 @@ abstract class CrawlJob
 	public $urlArray; 
 	protected $setting;
 	private $errors;
-	private $urlGetCount;
+	protected $urlGetCount;
 	protected $results;
 	//$url:
 	//     Url object or array('url' => '', 'method' => 'GET', 'data' => '')
@@ -286,6 +288,7 @@ abstract class CrawlJob
 	public function urlDone($no, $crawler)
 	{
 		$this->urlGetCount++;
+		echo "count: ".$this->urlGetCount."\n";
 
 		$data = curl_multi_getcontent($this->urlArray[$no]->hd);
 		$html = new simple_html_dom($data);
@@ -294,7 +297,7 @@ abstract class CrawlJob
 		$this->results[$no] = $res;
 		if ($this->urlGetCount === count($this->urlArray))
 		{
-			$this->jobDone($this->results, $crawler);
+			$this->jobDone($crawler);
 			return true;
 		}
 		return false;
@@ -315,7 +318,7 @@ abstract class CrawlJob
 	//$result: result return by process();
 	//abstract public function save($result);
 	abstract public function onError();
-	abstract public function jobDone($results, $crawler);
+	abstract public function jobDone($crawler);
 
 }
 

@@ -28,22 +28,23 @@ class SoftwareListJob extends CrawlJob
 		//echo $html;
 		return $items;
 	}
-	public function jobDone($results, $crawler)
+	public function jobDone($crawler)
 	{
-		var_dump($this->results);
+		//var_dump($this->results);
 		echo "all job done\n";
 
 		$newjobs = array();
-		foreach($results as $result)
+		foreach($this->results as $result)
 		{
-			//foreach($result as &$res)
-			//{
-			//    $res['url'] = 'http://software.hit.edu.cn'.$res['url'];
-			//}
+			foreach($result as &$res)
+			{
+			   $res['url'] = 'http://software.hit.edu.cn'.$res['url'];
+			}
 			$itemjob = new SoftwareItemJob($result);
 			$newjobs[] = $itemjob;
 		}
 		$crawler->addJobs($newjobs);
+		var_dump($newjobs);
 		echo "add done\n";
 		//var_dump($newjobs);
 	}
@@ -63,22 +64,45 @@ class SoftwareItemJob extends CrawlJob
 	public function process($html, $urlobj, $crawler)
 	{
 		//echo "get html\n $html\n";
-		echo curl_getinfo($urlobj->hd, CURLINFO_HTTP_CODE)."\n";
-
+		$code = curl_getinfo($urlobj->hd, CURLINFO_HTTP_CODE)."\n";
 		$item = array();
-		$title = $html->find('h3#page_news_title', 0);
-		if (!is_null($title))
-			$item['title'] = $title->innertext;
-		$newdate = $html->find('i#page_news_date', 0);
-		if (!is_null($newdate))
+		switch(intval($code))
 		{
-			var_dump($newdate->innertext);
+		case 200: //normal return code
+			$title = $html->find('h3.page_news_title', 0);
+			if (!is_null($title))
+				$item['title'] = $title->innertext;
+			$newdate = $html->find('i.page_news_date', 0);
+			if (!is_null($newdate))
+			{
+				$data = preg_split('/&nbsp;&nbsp;/', $newdate->innertext, -1, PREG_SPLIT_NO_EMPTY);
+				$item['time'] = $data[0];
+				$srstr = preg_split('/：/', trim($data[1]));
+				$item['source'] = trim($srstr[1]);
+				$adstr = preg_split('/：/', $data[2]);
+				$item['admin'] = trim($adstr[1]);
+			}
+			$content = $html->find('div.page_content', 0);
+			$item['content'] = $content->innertext;
+			break;
+		case 302://object removed
+			echo $html."\n";
+			$redir = $html->find('h2 a', 0);
+			$item['redir'] = $redir->href;
+			$item['title'] = $urlobj->title;
+			$item['time'] = $urlobj->time;
+			break;
+		default:
+			echo "unknown return code $code\n";
+			break;
+
 		}
 
-		return "success";
+		return $item;
 	}
-	public function jobDone($results, $crawler)
+	public function jobDone($crawler)
 	{
+		echo "done count: ".$this->urlGetCount."\n";
 		var_dump($this->results);
 		echo "all job done\n";
 
