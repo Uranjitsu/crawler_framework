@@ -76,7 +76,6 @@ class Crawler
 
 	public function process($info)
 	{
-		echo "in process\n";
 		$cjob = null;
 		$jobkey = -1;
 		$urlNum = -1;
@@ -288,7 +287,6 @@ abstract class CrawlJob
 	public function urlDone($no, $crawler)
 	{
 		$this->urlGetCount++;
-		echo "count: ".$this->urlGetCount."\n";
 
 		$data = curl_multi_getcontent($this->urlArray[$no]->hd);
 		$html = new simple_html_dom($data);
