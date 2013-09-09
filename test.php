@@ -10,7 +10,7 @@ require_once('crawler.php');
 	*      * @param bool $before
 	*       * @return bool XML string added
 	*        */
-function simplexml_import_xml(SimpleXMLElement $parent, $xml, $before = false)
+function simplexml_import_xml($parent, $xml, $before = false)
 {
 	$xml = (string)$xml;
 
@@ -38,7 +38,7 @@ function simplexml_import_xml(SimpleXMLElement $parent, $xml, $before = false)
  *    * @param bool $before
  *     * @return bool SimpleXMLElement added
  *      */
-function simplexml_import_simplexml(SimpleXMLElement $parent, SimpleXMLElement $child, $before = false)
+function simplexml_import_simplexml($parent, $child, $before = false)
 {
 	// check if there is something to add
 	if ($child[0] == NULL) {
@@ -55,6 +55,7 @@ function simplexml_import_simplexml(SimpleXMLElement $parent, SimpleXMLElement $
 	}
 
 	$xml = $child->asXML();
+	//echo $xml."\n";
 
 	// remove the XML declaration on document elements
 	if ($child->xpath('/*') == array($child)) {
@@ -208,10 +209,14 @@ class SoftwareItemJob extends CrawlJob
 			$channel = $xml->xpath('/rss/channel');
 			$channel = $channel[0];
 			$channel->lastBuildDate = date('r');
-			if (is_array($channel->item))
-				$items = clone $channel->item;                                                      
-			else
-				$items = array(clone $channel->item);
+			$olditems = $channel->xpath('item');
+			$items = array();                                                      
+			foreach($olditems as $item)
+			{
+				$items[] = clone $item;
+			}
+			//var_dump($items);
+			//var_dump($channel->item);
 			unset($channel->item);
 
 			uasort($this->results, array('self', 'itemCmp'));
@@ -249,11 +254,14 @@ class SoftwareItemJob extends CrawlJob
 			}
 
 			echo "copy old items\n";
-			for($i = 0;$i < 10-count($this->results) && $i < count($items);$i++)
+			for($i = 0;$i < 10-$this->urlGetCount && $i < count($items);$i++)
 			{
-				var_dump($items[$i]);
 				if ($items[$i]->count())//item has child,which means has content 
-					$channel = simplexml_import_simplexml($channel, $items[$i]);
+				{
+					//var_dump($items[$i]);
+					//echo $items[$i] instanceof SimpleXMLExtended;
+					simplexml_import_simplexml($channel, $items[$i]);
+				}
 				   //$channel->item;
 			}
 			$xmlstr = $xml->asXML();
@@ -303,6 +311,8 @@ class SimpleXMLExtended extends SimpleXMLElement {
 		$node->appendChild($no->createCDATASection($cdata_text)); 
 	} 
 }
+
+date_default_timezone_set('Asia/Shanghai');
 
 $soft = new SoftwareListJob(
 	array(

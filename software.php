@@ -38,12 +38,14 @@ curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
 
 //print curl_error($curl);
 
-$sx = simplexml_load_file('software.rss');
+$sx = simplexml_load_file('test.rss');
 
 //var_dump($sx->xpath('/rss/channel/item'));
 $channel = $sx->xpath('/rss/channel');
 $channel = $channel[0];
 $channel->lastBuildDate = date('Y-m-d H:i:s');
+var_dump($channel->xpath('item'));
+die();
 if (is_array($channel->item))
 	$items = clone $channel->item;                                               
 else
