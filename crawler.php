@@ -7,6 +7,8 @@ define('CRAWL_URL_ERROR', -1);
 define('CRAWL_PROXY_HTTP', CURLPROXY_HTTP);
 define('CRAWL_PROXY_SOCKS5', CURLPROXY_SOCKS5);
 
+//Usage:
+//first new a Crawler, call start() to crawl
 class Crawler
 {
 	private $jobs; //array contain CrawlJob objects
@@ -31,6 +33,9 @@ class Crawler
 		$this->has_start = true;
 		$mrc = $this->multiExec();
 
+		//use select to get response
+		//proceed select until all handle response
+		//can refer php.net page, curl_multi_select() api
 		while ($this->active && $mrc == CURLM_OK) 
 		{
 			if (curl_multi_select($this->mh) != -1) 
@@ -47,12 +52,16 @@ class Crawler
 				} while ($mrc == CURLM_CALL_MULTI_PERFORM);
 			}
 		}
+		//if jobArray still has job objects when select is done,call job's jobDone() 
 		foreach($this->jobs as $job)
 		{
 			$job->jobDone($this);
 		}
 	}
 
+	//process handles
+	//if error occur, report it
+	//todo: error handling havn't completed
 	private function multiExec()
 	{
 		do {
@@ -74,6 +83,9 @@ class Crawler
 		return $mrc;
 	}
 
+	//when a handle is available to process, process it
+	//first find the handle object in jobs, then call job's urlDone function
+	//if all urls of a job are completed, remove the job
 	public function process($info)
 	{
 		$cjob = null;
@@ -143,6 +155,8 @@ class Crawler
 
 	}
 
+	//after a job is added, process the job, get setting, init handler and set into multi_handler
+	//$job: CrawlJob object
 	private function processJob($job)
 	{
 		$setting = $job->getSetting();
@@ -224,15 +238,15 @@ class Crawler
 	}
 }	
 
-//Use this by extend and complete two function
+//Use this by extend it and complete process(), jobDone(), onError() three function
 abstract class CrawlJob
 {
 	//array contain Url objects 
 	public $urlArray; 
 	protected $setting;
-	private $errors;
-	protected $urlGetCount;
-	protected $results;
+	protected $errors;
+	protected $urlGetCount;//after a url object is completed, urlGetCount++
+	protected $results;//array contain items that process() returns
 	//$url:
 	//     Url object or array('url' => '', 'method' => 'GET', 'data' => '')
 	//     or Url object array
@@ -284,6 +298,12 @@ abstract class CrawlJob
 		$this->results = array();
 	}
 
+	//when a url is completed, crawler will call urlDone()
+	//$no: nth url object is complete
+	//$crawler: Crawler object
+	//return: bool
+	//		true: all url object is done	
+	//		false: not done
 	public function urlDone($no, $crawler)
 	{
 		$this->urlGetCount++;
@@ -291,8 +311,10 @@ abstract class CrawlJob
 		$data = curl_multi_getcontent($this->urlArray[$no]->hd);
 		$html = new simple_html_dom($data);
 
+		//call job's process function
 		$res = $this->process($html, $this->urlArray[$no], $crawler);
 		$this->results[$no] = $res;
+		//if all job is done, call jobDone()
 		if ($this->urlGetCount === count($this->urlArray))
 		{
 			$this->jobDone($crawler);
@@ -308,13 +330,14 @@ abstract class CrawlJob
 	{
 		$this->errors = $err;
 	}
-	//return processed data to save
+	//$html: simple_html_dom object
+	//$urlobj: Url object
+	//$crawler: Crawler object
+	//return processed data to handle in jobDone()
 	//like:
 	//$result = '123';
 	//return $result;
 	abstract public function process($html, $urlobj, $crawler);
-	//$result: result return by process();
-	//abstract public function save($result);
 	abstract public function onError();
 	abstract public function jobDone($crawler);
 

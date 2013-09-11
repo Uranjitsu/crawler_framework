@@ -55,7 +55,6 @@ function simplexml_import_simplexml($parent, $child, $before = false)
 	}
 
 	$xml = $child->asXML();
-	//echo $xml."\n";
 
 	// remove the XML declaration on document elements
 	if ($child->xpath('/*') == array($child)) {
@@ -65,14 +64,25 @@ function simplexml_import_simplexml($parent, $child, $before = false)
 
 	return simplexml_import_xml($parent, $xml, $before);
 }
+
+//extend SimpleXML support addCData
+class SimpleXMLExtended extends SimpleXMLElement {
+	public function addCData($cdata_text) {
+		$node = dom_import_simplexml($this); 
+		$no   = $node->ownerDocument; 
+		$node->appendChild($no->createCDATASection($cdata_text)); 
+	} 
+}
+
+
 //can change this to anoymous function
 //replace class 
-	//get list
-	class SoftwareListJob extends CrawlJob
+//get list
+class SoftwareListJob extends CrawlJob
+{
+	private $rssfilename;
+	public function __construct($url, $rssfile = 'software.rss', $setting = array())
 	{
-		private $rssfilename;
-		public function __construct($url, $rssfile = 'software.rss', $setting = array())
-		{
 		$this->rssfilename = $rssfile;
 		parent::__construct($url, $setting);
 	}
@@ -91,16 +101,15 @@ function simplexml_import_simplexml($parent, $child, $before = false)
 			$item['time'] = $li->find('span', 0)->innertext;
 			$items[] = $item;
 		}
+		$items['ref'] = $urlobj->url;
 		//echo $html;
 		return $items;
 	}
-	//need optimize
-	//check whether need to update
 	public function jobDone($crawler)
 	{
-		//var_dump($this->results);
 		echo "all job done\n";
 
+		//because of simplexml not supporting <xxx:xxx> tag, preprocess first
 		$xmlstr = file_get_contents($this->rssfilename);
 		$xmlstr = preg_replace('/<content:encoded>/', '<content_encoded>', $xmlstr);
 		$xmlstr = preg_replace('/<\/content:encoded>/', '</content_encoded>', $xmlstr);
@@ -108,42 +117,48 @@ function simplexml_import_simplexml($parent, $child, $before = false)
 		$xmlstr = preg_replace('/<\/dc:creator>/', '</dc_creator>', $xmlstr);
 		$xmlstr = preg_replace('/<dc:creator\/>/', '<dc_creator/>', $xmlstr);
 		$xml = simplexml_load_string($xmlstr, 'SimpleXMLExtended', LIBXML_NOCDATA);
-		//$xml = simplexml_load_file($this->rssfilename, 'SimpleXMLExtended', LIBXML_NOCDATA);
+
 		$items = $xml->xpath('/rss/channel/item');
 
 		$newjobs = array();
 
-		foreach($this->results as $result)
+		uasort($this->results, array('self', 'listCmp'));
+		foreach($this->results as $k =>$result)
 		{
 			foreach($result as $key => $res)
 			{
-			   $result[$key]['url'] = 'http://software.hit.edu.cn'.$res['url'];
-			   foreach($items as $item)
-			   {
-				   if (strcmp($item->link, $result[$key]['url']) == 0)
-				   {
-					   echo $result[$key]['url']."\n";
-					   unset($result[$key]);
-					   break;
-				   }
-			   }
+				if (strcmp($key, 'url') == 0)
+					continue;
+				echo $res['url']."\n";
+				$result[$key]['url'] = 'http://software.hit.edu.cn'.$res['url'];
+				foreach($items as $item)
+				{
+					if (strcmp($item->link, $result[$key]['url']) == 0)
+					{
+						echo $result[$key]['url']."\n";
+						unset($result[$key]);
+						break;
+					}
+				}
 			}
-			//var_dump($result);
 			$itemjob = new SoftwareItemJob($result, $this->rssfilename);
 			$newjobs[] = $itemjob;
 		}
 		$crawler->addJobs($newjobs);
-		//var_dump($newjobs);
 		echo "add done\n";
-		//var_dump($newjobs);
+	}
+	public static function listCmp($a, $b)
+	{
+		return strcmp($a['ref'], $b['ref']);
 	}
 	public function onError()
 	{
 		echo "error occur\n";
+		var_dump($errors);
 	}
 }
 
-//get each item
+//process each item
 class SoftwareItemJob extends CrawlJob
 {
 	private $rssfilename;
@@ -154,7 +169,6 @@ class SoftwareItemJob extends CrawlJob
 	}
 	public function process($html, $urlobj, $crawler)
 	{
-		//echo "get html\n $html\n";
 		$code = curl_getinfo($urlobj->hd, CURLINFO_HTTP_CODE)."\n";
 		$item = array();
 		switch(intval($code))
@@ -197,8 +211,6 @@ class SoftwareItemJob extends CrawlJob
 		echo "done count: ".$this->urlGetCount."\n";
 		if ($this->urlGetCount)//updated
 		{
-			//var_dump($this->results);
-			//$xml = simplexml_load_file($this->rssfilename, 'SimpleXMLExtended', LIBXML_NOCDATA);
 			$xmlstr = file_get_contents($this->rssfilename);
 			$xmlstr = preg_replace('/<content:encoded>/', '<content_encoded>', $xmlstr);
 			$xmlstr = preg_replace('/<\/content:encoded>/', '</content_encoded>', $xmlstr);
@@ -215,12 +227,10 @@ class SoftwareItemJob extends CrawlJob
 			{
 				$items[] = clone $item;
 			}
-			//var_dump($items);
-			//var_dump($channel->item);
 			unset($channel->item);
 
 			uasort($this->results, array('self', 'itemCmp'));
-
+			
 			foreach($this->results as $result)
 			{
 				$newnode = $channel->addChild('item');			
@@ -238,31 +248,21 @@ class SoftwareItemJob extends CrawlJob
 				}else{
 					$desc = mb_substr(strip_tags($result['content']), 0, 501, 'UTF-8');
 					$desc .= ' <span class="ellipsis">&#8230;</span> <span class="more-link-wrap"><a href="'.$result['url'].'" class="more-link"><span>Read More</span></a></span>';
-					//echo "$desc\n";
 					$descnote = $newnode->addChild('description');
 					$descnote->addCData($desc);
-					//$newnode->description = '<![CDATA[ '.$desc.' ]]>';
-					//$newnode->addChild(new SimpleXMLElement('<item><description><![CDATA[ '.$desc.' ]]></description></item>'));
-					//$content = $newnode->addChild('content:encoded');
 					$content = $newnode->addChild('content_encoded');
 					$content->addCData($result['content']);
-					//$newnode->content = '<![CDATA[ '.$result['content'].' ]]>';
-					//$newnode->addChild(new SimpleXMLElement('<item><content><![CDATA[ '.$result['content'].' ]]></content></item>'));
 					$newnode->addChild('dc_creator', $result['admin']);
-					//$newnode->addChild('source', 'http://software.hit.edu.cn');
 				}
 			}
 
 			echo "copy old items\n";
-			for($i = 0;$i < 10-$this->urlGetCount && $i < count($items);$i++)
+			for($i = 0;$i < 20-$this->urlGetCount && $i < count($items);$i++)
 			{
 				if ($items[$i]->count())//item has child,which means has content 
 				{
-					//var_dump($items[$i]);
-					//echo $items[$i] instanceof SimpleXMLExtended;
 					simplexml_import_simplexml($channel, $items[$i]);
 				}
-				   //$channel->item;
 			}
 			$xmlstr = $xml->asXML();
 			$xmlstr = preg_replace('/<content_encoded>/', '<content:encoded>', $xmlstr);
@@ -271,22 +271,7 @@ class SoftwareItemJob extends CrawlJob
 			$xmlstr = preg_replace('/<\/dc_creator>/', '</dc:creator>', $xmlstr);
 			$xmlstr = preg_replace('/<dc_creator\/>/', '<dc:creator/>', $xmlstr);
 			file_put_contents($this->rssfilename, $xmlstr);
-			/*
-			 *$dom = new DOMDocument("1.0");
-			 *$dom->preserveWhiteSpace = false;
-			 *$dom->formatOutput = true;
-			 *$dom->loadXML($xml->asXML());
-			 *$output =  $dom->saveXML();
-			 */
-			//$dom = dom_import_simplexml($xml)->ownerDocument;
-			//$dom->formatOutput = true;
-			//$output = $dom->saveXML();
-			//file_put_contents($this->rssfilename, $output);
-
-			//$xml->asXML($this->rssfilename);
-			//$result = preg_replace('/(&lt;!\[CDATA\[)(.+)(\]\]&gt;)/', '<![CDATA[ $2 ]]>', $result);
-			//file_put_contents($this->rssfilename, $result);
-			echo "file: $this->rssfilename saved\n";	
+		echo "file: $this->rssfilename saved\n";	
 
 		}
 		echo "all job done\n";
@@ -295,8 +280,6 @@ class SoftwareItemJob extends CrawlJob
 	public static function itemCmp($a, $b)
 	{
 		return strtotime($a['time']) < strtotime($b['time']);
-		//$atime = strtotime($a['time']);
-		//$btime = strtotime($b['time']);
 	}
 	public function onError()
 	{
@@ -304,20 +287,13 @@ class SoftwareItemJob extends CrawlJob
 	}
 }
 
-class SimpleXMLExtended extends SimpleXMLElement {
-	public function addCData($cdata_text) {
-		$node = dom_import_simplexml($this); 
-		$no   = $node->ownerDocument; 
-		$node->appendChild($no->createCDATASection($cdata_text)); 
-	} 
-}
 
 date_default_timezone_set('Asia/Shanghai');
 
 $soft = new SoftwareListJob(
 	array(
-		//new Url('http://software.hit.edu.cn/article/show/763.aspx'), 
-		new Url('http://software.hit.edu.cn/article/0/1.aspx')
+		new Url('http://software.hit.edu.cn/article/0/1.aspx'),
+		new Url('http://software.hit.edu.cn/article/0/2.aspx')
 	));
 
 $crawler = new Crawler;
