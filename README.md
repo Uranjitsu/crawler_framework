@@ -142,8 +142,11 @@ $soft = new DemoJob(
 ```
  
 **Post field in Url**
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> parent of 2f0c6d4... update readme
 By default, urls is requested in 'GET' mode.If your sites need post param, you need set in your URL object.
 
 ```php
