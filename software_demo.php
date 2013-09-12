@@ -127,15 +127,15 @@ class SoftwareListJob extends CrawlJob
 		{
 			foreach($result as $key => $res)
 			{
-				if (strcmp($key, 'url') == 0)
+				if (strcmp($key, 'ref') == 0)
 					continue;
-				echo $res['url']."\n";
+				//echo 'url:  '.$res['url']."\n";
 				$result[$key]['url'] = 'http://software.hit.edu.cn'.$res['url'];
 				foreach($items as $item)
 				{
 					if (strcmp($item->link, $result[$key]['url']) == 0)
 					{
-						echo $result[$key]['url']."\n";
+						echo 'url:'.$result[$key]['url']."\n";
 						unset($result[$key]);
 						break;
 					}
@@ -154,7 +154,7 @@ class SoftwareListJob extends CrawlJob
 	public function onError()
 	{
 		echo "error occur\n";
-		var_dump($errors);
+		var_dump($this->errors);
 	}
 }
 
@@ -244,7 +244,7 @@ class SoftwareItemJob extends CrawlJob
 				if (array_key_exists('redir', $result))
 				{
 					$newnode->addChild('description', 'refer to :'.$result['redir']);
-					$newnode->addChild('content_encoded', 'refer to :'.$result['redir']);
+					$newnode->addChild('content_encoded', 'refer to <a href="'.$result['redir'].'">'.$result['redir'].'</a>');
 				}else{
 					$desc = mb_substr(strip_tags($result['content']), 0, 501, 'UTF-8');
 					$desc .= ' <span class="ellipsis">&#8230;</span> <span class="more-link-wrap"><a href="'.$result['url'].'" class="more-link"><span>Read More</span></a></span>';
@@ -270,7 +270,7 @@ class SoftwareItemJob extends CrawlJob
 			$xmlstr = preg_replace('/<dc_creator>/', '<dc:creator>', $xmlstr);
 			$xmlstr = preg_replace('/<\/dc_creator>/', '</dc:creator>', $xmlstr);
 			$xmlstr = preg_replace('/<dc_creator\/>/', '<dc:creator/>', $xmlstr);
-			file_put_contents($this->rssfilename, $xmlstr);
+			//file_put_contents($this->rssfilename, $xmlstr);
 		echo "file: $this->rssfilename saved\n";	
 
 		}
@@ -284,6 +284,7 @@ class SoftwareItemJob extends CrawlJob
 	public function onError()
 	{
 		echo "error occur\n";
+		var_dump($this->errors);
 	}
 }
 

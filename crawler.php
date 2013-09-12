@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * written by summer @ 2013.9.2
+ * contact: marchtea213@gmail.com
+ * feel free to make change
+ * 
+*/
+
+
+
 //rely on simple_html_dom 
 require_once('simple_html_dom.php');
 
@@ -387,7 +396,7 @@ class Url
 	//data could be string or array
 	//ref: php curl_setopt CURLOPT_POSTFIELDS options
 	public $data;
-	public $hd;
+	public $hd;//curl handler
 	public function __construct($url, $method = 'GET', $data = null)
 	{
 		$this->url = $url;
