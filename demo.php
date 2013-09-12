@@ -49,10 +49,8 @@ class DemoJob extends CrawlJob
 }
 
 $soft = new DemoJob(
-	array(
-		new Url('http://en.wikipedia.org/wiki/Aerosmith'),
-		new Url('http://en.wikipedia.org/wiki/Dreamtheater')
-	));
+		new Url('http://en.wikipedia.org/wiki/Aerosmith', 'POST', 'para1=val1&para2=val2')
+	);
 
 $crawler = new Crawler;
 $crawler->start($soft);
