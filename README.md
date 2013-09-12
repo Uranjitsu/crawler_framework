@@ -126,6 +126,8 @@ $soft = new DemoJob(
 ```
 
 **Set timeout**
+
+
 By default, `connection time out` is 30s, `response time out` is 20s, you can change it like:
 
 ```php
@@ -140,6 +142,7 @@ $soft = new DemoJob(
 ```
  
 **Post field in Url**
+
 
 By default, urls is requested in 'GET' mode.If your sites need post param, you need set in your URL object.
 
